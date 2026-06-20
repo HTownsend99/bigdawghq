@@ -22,7 +22,11 @@ const THEMES: Record<string, any> = {
   "Bills":       { bg:"#fef8e6", bg2:"#fdf0c8", accent:"#907000", border:"#c8a840", text:"#6a5200", sub:"#a88800", card:"#fffcf0", check:"#907000" },
 };
 
-const CATS = ["Today","Upcoming","Admin","Financial","Future Buys","Shopping","Concepts","Long Term","Job / Career","Health","Socialising","Events","Bills"];
+// Core task categories (Tasks tab) vs Future Items categories (Future Items tab).
+const CORE_CATS = ["Today","Upcoming","Admin","Financial","Health"];
+const FUTURE_CATS = ["Future Buys","Shopping","Concepts","Long Term","Job / Career","Socialising"];
+// Every category a task can belong to (excludes Events — now a separate table — and Bills).
+const TASK_CATS = [...CORE_CATS, ...FUTURE_CATS];
 const DEF_PRI: Record<string, string> = { "Today":"high","Upcoming":"high","Admin":"medium","Financial":"high","Future Buys":"low","Shopping":"low","Concepts":"medium","Long Term":"low","Job / Career":"high","Health":"medium","Socialising":"low","Events":"high","Bills":"high" };
 
 const DEFAULT_TASKS = [
@@ -87,7 +91,7 @@ function getDueLabel(due: any) {
     const d = new Date(due.date + "T00:00:00");
     const diff = Math.ceil((d.getTime() - today.getTime()) / 86400000);
     const label = d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
-    if (diff < 0) return { text: "Overdue " + label, cls: "overdue" };
+    if (diff < 0) return { text: "⚠ " + label, cls: "overdue" };
     if (diff === 0) return { text: "Today", cls: "due-today" };
     if (diff === 1) return { text: "Tomorrow", cls: "has-date" };
     return { text: label, cls: "has-date" };
@@ -125,21 +129,26 @@ function getTaskDate(due: any): string | null {
 
 const FONT = "'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 
+// Shared pill geometry so the control column lines up perfectly across every row.
+const pillBase: any = { fontSize: 11, fontWeight: 700 as const, height: 26, lineHeight: "24px", borderRadius: 7, cursor: "pointer" as const, whiteSpace: "nowrap" as const, textAlign: "center" as const, boxSizing: "border-box" as const, display: "inline-block", fontFamily: FONT, padding: 0 };
+
 const priStyle = (p: string) => {
-  if (p === "high") return { background: "#fee2e2", color: "#b91c1c", border: "1px solid #fca5a5", fontWeight: 700 as const, fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer" as const, whiteSpace: "nowrap" as const, lineHeight: "18px" };
-  if (p === "low") return { background: "#dbeafe", color: "#1d4ed8", border: "1px solid #93c5fd", fontWeight: 700 as const, fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer" as const, whiteSpace: "nowrap" as const, lineHeight: "18px" };
-  return { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d", fontWeight: 700 as const, fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer" as const, whiteSpace: "nowrap" as const, lineHeight: "18px" };
+  const w = { ...pillBase, width: 60 };
+  if (p === "high") return { ...w, background: "#fee2e2", color: "#b91c1c", border: "1px solid #fca5a5" };
+  if (p === "low") return { ...w, background: "#dbeafe", color: "#1d4ed8", border: "1px solid #93c5fd" };
+  return { ...w, background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
 };
 
 const dueStyle = (dl: any) => {
-  const base: any = { fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer", whiteSpace: "nowrap", lineHeight: "18px", fontWeight: 600, border: "1px solid #e5e7eb", color: "#9ca3af", background: "transparent", fontFamily: FONT };
+  const base: any = { ...pillBase, width: 86, fontWeight: 600 as const, overflow: "hidden", textOverflow: "ellipsis", border: "1px dashed #d1d5db", color: "#9ca3af", background: "transparent" };
   if (!dl) return base;
   if (dl.cls === "overdue") return { ...base, border: "1px solid #fca5a5", color: "#dc2626", background: "#fef2f2" };
   if (dl.cls === "due-today") return { ...base, border: "1px solid #fcd34d", color: "#d97706", background: "#fffbeb" };
   return { ...base, border: "1px solid #93c5fd", color: "#2563eb", background: "#eff6ff" };
 };
 
-const smallBtn: any = { fontSize: 11, padding: "2px 6px", borderRadius: 6, border: "1px solid #e5e7eb", color: "#9ca3af", cursor: "pointer", background: "transparent", lineHeight: "18px" };
+// Kebab / overflow button — single big touch target for Move + Delete.
+const kebabStyle: any = { width: 28, height: 26, borderRadius: 7, border: "1px solid #e5e7eb", color: "#9ca3af", cursor: "pointer", background: "transparent", fontSize: 15, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 };
 
 /* ══════════════════════════════════════════════
    INBOX DATA
@@ -189,12 +198,15 @@ export default function App() {
 
   const [tasks, setTasks] = useState<any[]>([]);
   const [bills, setBills] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [page, setPage] = useState<"tasks" | "calendar" | "inbox">("tasks");
+  const [page, setPage] = useState<"tasks" | "future" | "calendar" | "bills" | "inbox" | "completed">("tasks");
   const [activeTab, setActiveTab] = useState("All");
+  const [futureTab, setFutureTab] = useState("All");
   const [dueModal, setDueModal] = useState<number | null>(null);
   const [moveModal, setMoveModal] = useState<number | null>(null);
+  const [actionSheet, setActionSheet] = useState<number | null>(null);
   const [addBillModal, setAddBillModal] = useState(false);
   const [newBill, setNewBill] = useState({ name: "", amount: "", freq: "Monthly", day: "1" });
   const [addInput, setAddInput] = useState("");
@@ -205,6 +217,10 @@ export default function App() {
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [calTab, setCalTab] = useState<"events" | "due">("due");
+  const [addEventModal, setAddEventModal] = useState(false);
+  const [newEvent, setNewEvent] = useState({ title: "", date: "", time: "", note: "" });
+  const [deleteEventConfirm, setDeleteEventConfirm] = useState<number | null>(null);
 
   const [inboxTab, setInboxTab] = useState<"messages" | "email">("messages");
 
@@ -218,20 +234,40 @@ export default function App() {
   /* ── Data fetch ── */
   const fetchData = useCallback(async () => {
     if (!session) return;
-    const [{ data: t }, { data: b }] = await Promise.all([
+    const userId = session.user.id;
+    const [tRes, bRes, evRes] = await Promise.all([
       supabase.from("tasks").select("*").order("id"),
       supabase.from("bills").select("*").order("id"),
+      supabase.from("events").select("*").order("date"),
     ]);
-    if (t && t.length > 0) setTasks(t);
-    else {
-      const userId = session.user.id;
+    const eventsTableOk = !evRes.error;
+
+    // ── Tasks (seed defaults on first run) ──
+    let t = tRes.data || [];
+    if (t.length === 0) {
       const rows = DEFAULT_TASKS.map(d => ({ ...d, user_id: userId }));
       const { data: inserted } = await supabase.from("tasks").insert(rows).select();
-      if (inserted) setTasks(inserted);
+      t = inserted || [];
     }
-    if (b && b.length > 0) setBills(b);
+
+    // ── One-time migration: legacy "Events" category tasks → events table ──
+    let ev = evRes.data || [];
+    if (eventsTableOk) {
+      const legacy = t.filter(x => x.cat === "Events");
+      if (legacy.length > 0) {
+        const evRows = legacy.map(x => ({ user_id: userId, title: x.name, date: getTaskDate(x.due), time: null, note: null }));
+        const { data: insEv } = await supabase.from("events").insert(evRows).select();
+        await supabase.from("tasks").delete().in("id", legacy.map(x => x.id));
+        t = t.filter(x => x.cat !== "Events");
+        if (insEv) ev = [...ev, ...insEv];
+      }
+    }
+    setTasks(t);
+    setEvents(ev);
+
+    // ── Bills (seed defaults on first run) ──
+    if (bRes.data && bRes.data.length > 0) setBills(bRes.data);
     else {
-      const userId = session.user.id;
       const rows = DEFAULT_BILLS.map(d => ({ ...d, user_id: userId }));
       const { data: inserted } = await supabase.from("bills").insert(rows).select();
       if (inserted) setBills(inserted);
@@ -258,8 +294,9 @@ export default function App() {
     const t = tasks.find(x => x.id === id);
     if (!t) return;
     const next = !t.done;
-    setTasks(prev => prev.map(x => x.id === id ? { ...x, done: next } : x));
-    await supabase.from("tasks").update({ done: next }).eq("id", id);
+    const completed_at = next ? new Date().toISOString() : null;
+    setTasks(prev => prev.map(x => x.id === id ? { ...x, done: next, completed_at } : x));
+    await supabase.from("tasks").update({ done: next, completed_at }).eq("id", id);
   };
 
   const cyclePriority = async (id: number) => {
@@ -292,7 +329,9 @@ export default function App() {
     const row = { user_id: session.user.id, cat: addCat, name: addInput.trim(), done: false, priority: DEF_PRI[addCat] || "medium", due: null, urgent: false };
     const { data } = await supabase.from("tasks").insert(row).select().single();
     if (data) setTasks(prev => [...prev, data]);
-    setAddInput(""); setActiveTab(addCat);
+    setAddInput("");
+    if (FUTURE_CATS.includes(addCat)) { setPage("future"); setFutureTab(addCat); }
+    else { setPage("tasks"); setActiveTab(addCat); }
   };
 
   const addBillFn = async () => {
@@ -306,6 +345,20 @@ export default function App() {
   const deleteBill = async (id: number) => {
     setBills(prev => prev.filter(x => x.id !== id));
     await supabase.from("bills").delete().eq("id", id);
+  };
+
+  /* ── Event CRUD ── */
+  const addEventFn = async () => {
+    if (!newEvent.title.trim() || !session) return;
+    const row = { user_id: session.user.id, title: newEvent.title.trim(), date: newEvent.date || null, time: newEvent.time || null, note: newEvent.note || null };
+    const { data } = await supabase.from("events").insert(row).select().single();
+    if (data) setEvents(prev => [...prev, data]);
+    setNewEvent({ title: "", date: "", time: "", note: "" }); setAddEventModal(false);
+  };
+
+  const deleteEvent = async (id: number) => {
+    setEvents(prev => prev.filter(x => x.id !== id));
+    await supabase.from("events").delete().eq("id", id);
   };
 
   if (authLoading) return <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: FONT }}>Loading...</div>;
@@ -352,21 +405,19 @@ export default function App() {
     const isBold = t.priority === "high" || t.urgent || isOverdue;
     const isItalic = t.priority === "low" && !t.urgent && !isOverdue;
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 10, border: `1px solid ${theme.border}40`, background: theme.card, opacity: t.done ? 0.35 : 1, borderLeft: `4px solid ${theme.accent}`, transition: "opacity 0.2s" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", marginBottom: 6, borderRadius: 12, border: `1px solid ${theme.border}40`, background: theme.card, opacity: t.done ? 0.4 : 1, borderLeft: `4px solid ${theme.accent}`, transition: "opacity 0.2s" }}>
         <button onClick={() => toggleDone(t.id)} style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, cursor: "pointer", border: t.done ? "none" : `2.5px solid ${theme.accent}60`, display: "flex", alignItems: "center", justifyContent: "center", background: t.done ? "#22c55e" : "transparent" }}>
           {t.done && <svg width="11" height="9" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>}
         </button>
         <span style={{ flex: 1, fontSize: 16, lineHeight: 1.35, color: t.done ? "#aaa" : "#1a1a1a", fontWeight: isBold ? 700 : isItalic ? 400 : 500, fontStyle: isItalic ? "italic" : "normal", textDecoration: t.done ? "line-through" : "none", minWidth: 0 }}>{t.name}</span>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0 }}>
-          <button onClick={() => cyclePriority(t.id)} style={priStyle(t.priority)}>{t.priority.charAt(0).toUpperCase() + t.priority.slice(1)}</button>
-          {t.urgent && <span style={{ fontSize: 9, background: "#ef4444", color: "#fff", padding: "1px 6px", borderRadius: 5, fontWeight: 800, animation: "pulse 1.5s infinite" }}>URGENT</span>}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <button onClick={() => { setDueModal(t.id); setCustomDate(t.due?.type === "custom" ? t.due.date : ""); }} style={dueStyle(dl)}>{dl ? dl.text : "+ Date"}</button>
-          <div style={{ display: "flex", gap: 3 }}>
-            <button onClick={() => setMoveModal(t.id)} style={smallBtn}>↗</button>
-            <button onClick={() => setDeleteConfirm(t.id)} style={{ ...smallBtn, fontSize: 10 }}>✕</button>
+        {/* Single aligned control row: fixed-width priority · date · overflow */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <div style={{ position: "relative" }}>
+            <button onClick={() => cyclePriority(t.id)} style={priStyle(t.priority)} title="Tap to change priority">{t.priority.charAt(0).toUpperCase() + t.priority.slice(1)}</button>
+            {t.urgent && <span style={{ position: "absolute", top: -4, right: -4, width: 9, height: 9, borderRadius: "50%", background: "#ef4444", border: "1.5px solid #fff", animation: "pulse 1.5s infinite" }} />}
           </div>
+          <button onClick={() => { setDueModal(t.id); setCustomDate(t.due?.type === "custom" ? t.due.date : ""); }} style={dueStyle(dl)} title="Set due date">{dl ? dl.text : "+ Date"}</button>
+          <button onClick={() => setActionSheet(t.id)} style={kebabStyle} title="More">⋯</button>
         </div>
       </div>
     );
@@ -376,7 +427,6 @@ export default function App() {
     const th = THEMES[cat];
     const catTasks = tasks.filter(t => t.cat === cat);
     const active = catTasks.filter(t => !t.done);
-    const done = catTasks.filter(t => t.done);
     const high = active.filter(t => t.priority === "high" || t.urgent);
     const rest = active.filter(t => t.priority !== "high" && !t.urgent);
     const hc = high.length;
@@ -389,13 +439,7 @@ export default function App() {
         <div style={{ padding: "4px 8px 8px" }}>
           {high.map(t => <TaskCard key={t.id} t={t} theme={th} />)}
           {rest.map(t => <TaskCard key={t.id} t={t} theme={th} />)}
-          {!active.length && !done.length && <div style={{ textAlign: "center", padding: 16, color: "#aaa", fontSize: 13 }}>No tasks yet</div>}
-          {done.length > 0 && (
-            <>
-              <div style={{ fontSize: 10, color: th.sub, textTransform: "uppercase", letterSpacing: 1, margin: "8px 0 4px", paddingTop: 6, borderTop: `1px solid ${th.border}60` }}>Completed ({done.length})</div>
-              {done.map(t => <TaskCard key={t.id} t={t} theme={th} />)}
-            </>
-          )}
+          {!active.length && <div style={{ textAlign: "center", padding: 16, color: "#aaa", fontSize: 13 }}>No open tasks</div>}
         </div>
       </div>
     );
@@ -442,6 +486,79 @@ export default function App() {
       <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: 280, maxWidth: "90vw", boxShadow: "0 8px 30px rgba(0,0,0,0.15)", maxHeight: "80vh", overflowY: "auto" }}>{children}</div>
     </div>
   );
+
+  /* ══════════════════════════════════════════════
+     BILLS PAGE
+     ══════════════════════════════════════════════ */
+  const BillsPage = () => {
+    const monthlyTotal = bills.reduce((sum, b) => sum + (b.freq === "Monthly" ? b.amount : b.amount * 4.333), 0);
+    return (
+      <div style={{ padding: "12px 0 80px" }}>
+        <div style={{ display: "flex", gap: 6, margin: "0 12px 12px" }}>
+          {[
+            { n: bills.length, l: "Bills tracked", c: THEMES["Bills"].accent },
+            { n: `$${Math.round(monthlyTotal).toLocaleString()}`, l: "≈ Per month", c: "#1a1a1a" },
+          ].map(s => (
+            <div key={s.l} style={{ flex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: s.c }}>{s.n}</div>
+              <div style={{ fontSize: 9, color: "#999", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 1 }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+        <BillBlock />
+      </div>
+    );
+  };
+
+  /* ══════════════════════════════════════════════
+     COMPLETED PAGE
+     ══════════════════════════════════════════════ */
+  const CompletedPage = () => {
+    const done = tasks.filter(t => t.done);
+    const groups: Record<string, any[]> = {};
+    done.forEach(t => {
+      const k = t.completed_at ? t.completed_at.slice(0, 10) : "—";
+      (groups[k] ||= []).push(t);
+    });
+    const keys = Object.keys(groups).sort((a, b) => a === "—" ? 1 : b === "—" ? -1 : b.localeCompare(a));
+    const fmtDay = (ds: string) => {
+      const d = new Date(ds + "T00:00:00");
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const yd = new Date(); yd.setDate(yd.getDate() - 1);
+      if (ds === todayStr) return "Today";
+      if (ds === yd.toISOString().slice(0, 10)) return "Yesterday";
+      return d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
+    };
+    return (
+      <div style={{ padding: "12px 12px 80px" }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 30, fontWeight: 900, color: "#22c55e" }}>{done.length}</div>
+          <div style={{ fontSize: 13, color: "#666", fontWeight: 600 }}>task{done.length !== 1 ? "s" : ""} completed<br /><span style={{ fontSize: 11, color: "#999", fontWeight: 400 }}>Tap the check to restore a task</span></div>
+        </div>
+        {done.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "#aaa", fontSize: 14 }}>No completed tasks yet</div>}
+        {keys.map(k => (
+          <div key={k} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#666", margin: "4px 2px 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              {k === "—" ? "Date unknown" : fmtDay(k)}
+            </div>
+            {groups[k].map(t => {
+              const th = THEMES[t.cat] || THEMES["Today"];
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", marginBottom: 6, borderRadius: 12, border: "1px solid #e5e7eb", background: "#fff", borderLeft: `4px solid ${th.accent}` }}>
+                  <button onClick={() => toggleDone(t.id)} title="Restore task" style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, cursor: "pointer", border: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "#22c55e" }}>
+                    <svg width="11" height="9" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>
+                  </button>
+                  <span style={{ flex: 1, fontSize: 15, color: "#9ca3af", textDecoration: "line-through", minWidth: 0 }}>{t.name}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6, background: th.bg2, color: th.text, whiteSpace: "nowrap", flexShrink: 0 }}>{t.cat}</span>
+                  <button onClick={() => setDeleteConfirm(t.id)} style={kebabStyle} title="Delete permanently">✕</button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   /* ══════════════════════════════════════════════
      INBOX PAGE
@@ -566,27 +683,60 @@ export default function App() {
   /* ══════════════════════════════════════════════
      CALENDAR PAGE
      ══════════════════════════════════════════════ */
+  const EventCard = ({ ev }: { ev: any }) => {
+    const eth = THEMES["Events"];
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 6, borderRadius: 12, border: `1px solid ${eth.border}50`, background: eth.card, borderLeft: `4px solid ${eth.accent}` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>{ev.title}</div>
+          {(ev.time || ev.note) && (
+            <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{[ev.time, ev.note].filter(Boolean).join(" · ")}</div>
+          )}
+        </div>
+        <button onClick={() => setDeleteEventConfirm(ev.id)} style={kebabStyle} title="Delete event">✕</button>
+      </div>
+    );
+  };
+
   const CalendarPage = () => {
+    const isEvents = calTab === "events";
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
     const firstDay = new Date(calYear, calMonth, 1).getDay();
     const monthName = new Date(calYear, calMonth).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+
+    // Date → items map, depending on active sub-tab.
     const dateMap: Record<string, any[]> = {};
-    tasks.filter(t => !t.done).forEach(t => {
-      const d = getTaskDate(t.due);
-      if (d) { if (!dateMap[d]) dateMap[d] = []; dateMap[d].push(t); }
-    });
+    if (isEvents) {
+      events.forEach(ev => { if (ev.date) (dateMap[ev.date] ||= []).push(ev); });
+    } else {
+      tasks.filter(t => !t.done).forEach(t => { const d = getTaskDate(t.due); if (d) (dateMap[d] ||= []).push(t); });
+    }
+
     const todayStr = new Date().toISOString().slice(0, 10);
     const cells: any[] = [];
     for (let i = 0; i < firstDay; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      cells.push({ day: d, date: ds, tasks: dateMap[ds] || [] });
+      cells.push({ day: d, date: ds, items: dateMap[ds] || [] });
     }
     const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else setCalMonth(calMonth - 1); };
     const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); };
-    const selTasks = selectedDate ? (dateMap[selectedDate] || []) : [];
+    const selItems = selectedDate ? (dateMap[selectedDate] || []) : [];
+    const accent = isEvents ? THEMES["Events"].accent : "#b8860b";
+
     return (
       <div style={{ padding: "12px 12px 0" }}>
+        {/* Sub-tabs: Events / Due Dates */}
+        <div style={{ display: "flex", marginBottom: 14, borderBottom: "1px solid #e5e7eb" }}>
+          {([["due", `Task Due Dates`], ["events", `Events`]] as const).map(([k, label]) => (
+            <button key={k} onClick={() => { setCalTab(k); setSelectedDate(null); }} style={{
+              flex: 1, padding: "8px 0", fontSize: 13, fontWeight: calTab === k ? 700 : 500, cursor: "pointer", fontFamily: FONT,
+              border: "none", borderBottom: calTab === k ? `3px solid ${accent}` : "3px solid transparent",
+              background: "transparent", color: calTab === k ? accent : "#999",
+            }}>{label}</button>
+          ))}
+        </div>
+
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <button onClick={prevMonth} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer", color: "#666", padding: "4px 10px" }}>‹</button>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>{monthName}</span>
@@ -602,14 +752,14 @@ export default function App() {
             if (!cell) return <div key={`empty-${i}`} />;
             const isToday = cell.date === todayStr;
             const isSelected = cell.date === selectedDate;
-            const cats = [...new Set(cell.tasks.map((t: any) => t.cat))];
+            const dots: string[] = isEvents ? (cell.items.length ? ["Events"] : []) : ([...new Set(cell.items.map((t: any) => t.cat))] as string[]);
             return (
               <button key={cell.date} onClick={() => setSelectedDate(isSelected ? null : cell.date)}
-                style={{ padding: "6px 2px 8px", borderRadius: 10, border: isSelected ? "2px solid #b8860b" : isToday ? "2px solid #2563eb" : "1px solid #eee", background: isSelected ? "#fff9e6" : isToday ? "#eff6ff" : "#fff", cursor: "pointer", textAlign: "center", minHeight: 48 }}>
+                style={{ padding: "6px 2px 8px", borderRadius: 10, border: isSelected ? `2px solid ${accent}` : isToday ? "2px solid #2563eb" : "1px solid #eee", background: isSelected ? "#fff9e6" : isToday ? "#eff6ff" : "#fff", cursor: "pointer", textAlign: "center", minHeight: 48 }}>
                 <div style={{ fontSize: 14, fontWeight: isToday ? 800 : 500, color: isToday ? "#2563eb" : "#1a1a1a" }}>{cell.day}</div>
-                {cell.tasks.length > 0 && (
+                {cell.items.length > 0 && (
                   <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 3, flexWrap: "wrap" }}>
-                    {cats.slice(0, 3).map((c: string) => (
+                    {dots.slice(0, 3).map((c: string) => (
                       <div key={c} style={{ width: 6, height: 6, borderRadius: "50%", background: THEMES[c]?.accent || "#888" }} />
                     ))}
                   </div>
@@ -618,36 +768,71 @@ export default function App() {
             );
           })}
         </div>
+
         {selectedDate && (
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
               {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" })}
-              <span style={{ fontSize: 13, fontWeight: 500, color: "#888", marginLeft: 8 }}>{selTasks.length} task{selTasks.length !== 1 ? "s" : ""}</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: "#888", marginLeft: 8 }}>{selItems.length} {isEvents ? "event" : "task"}{selItems.length !== 1 ? "s" : ""}</span>
             </div>
-            {selTasks.length === 0 && <div style={{ color: "#aaa", fontSize: 14, padding: "12px 0" }}>Nothing scheduled for this date</div>}
-            {selTasks.map(t => { const th = THEMES[t.cat] || THEMES["Today"]; return <TaskCard key={t.id} t={t} theme={th} />; })}
+            {selItems.length === 0 && <div style={{ color: "#aaa", fontSize: 14, padding: "12px 0" }}>Nothing scheduled for this date</div>}
+            {isEvents
+              ? selItems.map((ev: any) => <EventCard key={ev.id} ev={ev} />)
+              : selItems.map((t: any) => { const th = THEMES[t.cat] || THEMES["Today"]; return <TaskCard key={t.id} t={t} theme={th} />; })}
           </div>
         )}
-        <div style={{ marginTop: 24, paddingBottom: 80 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>Upcoming</div>
-          {(() => {
-            const todayStr2 = new Date().toISOString().slice(0, 10);
-            const upcoming = tasks.filter(t => !t.done && getTaskDate(t.due)).map(t => ({ ...t, _date: getTaskDate(t.due)! })).filter(t => t._date >= todayStr2).sort((a, b) => a._date.localeCompare(b._date)).slice(0, 15);
-            if (!upcoming.length) return <div style={{ color: "#aaa", fontSize: 14 }}>No upcoming dated tasks</div>;
-            let lastDate = "";
-            return upcoming.map(t => {
-              const th = THEMES[t.cat] || THEMES["Today"];
-              const showDate = t._date !== lastDate;
-              lastDate = t._date;
+
+        {/* ── EVENTS sub-tab: add + upcoming events ── */}
+        {isEvents ? (
+          <div style={{ marginTop: 24, paddingBottom: 80 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a" }}>Upcoming events</div>
+              <button onClick={() => { setNewEvent({ title: "", date: selectedDate || "", time: "", note: "" }); setAddEventModal(true); }} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${THEMES["Events"].border}`, color: THEMES["Events"].text, fontWeight: 700, background: "transparent", cursor: "pointer" }}>+ Add event</button>
+            </div>
+            {(() => {
+              const upcoming = events.filter(e => e.date && e.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
+              const undated = events.filter(e => !e.date);
+              if (!upcoming.length && !undated.length) return <div style={{ color: "#aaa", fontSize: 14 }}>No events yet — add one above</div>;
+              let lastDate = "";
               return (
-                <div key={t.id}>
-                  {showDate && <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginTop: 10, marginBottom: 4 }}>{new Date(t._date + "T00:00:00").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</div>}
-                  <TaskCard t={t} theme={th} />
-                </div>
+                <>
+                  {upcoming.map(ev => {
+                    const showDate = ev.date !== lastDate; lastDate = ev.date;
+                    return (
+                      <div key={ev.id}>
+                        {showDate && <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginTop: 10, marginBottom: 4 }}>{new Date(ev.date + "T00:00:00").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</div>}
+                        <EventCard ev={ev} />
+                      </div>
+                    );
+                  })}
+                  {undated.length > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginTop: 10, marginBottom: 4 }}>No date</div>}
+                  {undated.map(ev => <EventCard key={ev.id} ev={ev} />)}
+                </>
               );
-            });
-          })()}
-        </div>
+            })()}
+          </div>
+        ) : (
+          /* ── DUE DATES sub-tab: upcoming dated tasks ── */
+          <div style={{ marginTop: 24, paddingBottom: 80 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>Upcoming due dates</div>
+            {(() => {
+              const upcoming = tasks.filter(t => !t.done && getTaskDate(t.due)).map(t => ({ ...t, _date: getTaskDate(t.due)! })).filter(t => t._date >= todayStr).sort((a, b) => a._date.localeCompare(b._date)).slice(0, 15);
+              if (!upcoming.length) return <div style={{ color: "#aaa", fontSize: 14 }}>No upcoming dated tasks</div>;
+              let lastDate = "";
+              return upcoming.map(t => {
+                const th = THEMES[t.cat] || THEMES["Today"];
+                const showDate = t._date !== lastDate;
+                lastDate = t._date;
+                return (
+                  <div key={t.id}>
+                    {showDate && <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginTop: 10, marginBottom: 4 }}>{new Date(t._date + "T00:00:00").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}</div>}
+                    <TaskCard t={t} theme={th} />
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
       </div>
     );
   };
@@ -669,23 +854,26 @@ export default function App() {
           </div>
         </div>
 
-        {/* Page nav — Tasks / Calendar / Inbox */}
-        <div style={{ display: "flex", gap: 0, marginBottom: 8 }}>
-          {(["tasks", "calendar", "inbox"] as const).map(p => (
-            <button key={p} onClick={() => setPage(p)} style={{
-              flex: 1, padding: "8px 0", fontSize: 13, fontWeight: page === p ? 700 : 500, cursor: "pointer", fontFamily: FONT,
-              border: "none", borderBottom: page === p ? "3px solid #b8860b" : "3px solid transparent",
-              background: "transparent", color: page === p ? "#b8860b" : "#999",
-            }}>
-              {p === "tasks" ? "Tasks" : p === "calendar" ? "Calendar" : "Inbox"}
-            </button>
-          ))}
-        </div>
+        {/* Page nav — two rows: primary (active work) + secondary (reference) */}
+        {([
+          [["tasks", "Tasks"], ["calendar", "Calendar"], ["inbox", "Inbox"]],
+          [["future", "Future Items"], ["bills", "Bills"], ["completed", "Completed"]],
+        ] as const).map((row, ri) => (
+          <div key={ri} style={{ display: "flex", gap: 0, marginBottom: ri === 0 ? 2 : 8 }}>
+            {row.map(([p, label]) => (
+              <button key={p} onClick={() => { setPage(p as any); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{
+                flex: 1, padding: ri === 0 ? "8px 0" : "6px 0", fontSize: ri === 0 ? 13 : 12, fontWeight: page === p ? 700 : 500, cursor: "pointer", fontFamily: FONT,
+                border: "none", borderBottom: page === p ? "3px solid #b8860b" : "3px solid transparent",
+                background: "transparent", color: page === p ? "#b8860b" : "#999", whiteSpace: "nowrap",
+              }}>{label}</button>
+            ))}
+          </div>
+        ))}
 
-        {/* Category tabs — tasks page only */}
+        {/* Category tabs — Tasks page */}
         {page === "tasks" && (
           <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 10 }}>
-            {["All", ...CATS].map(t => {
+            {["All", ...CORE_CATS].map(t => {
               const th = THEMES[t] || { accent: "#b8860b" };
               const isActive = activeTab === t;
               return (
@@ -695,13 +883,27 @@ export default function App() {
             })}
           </div>
         )}
+
+        {/* Category tabs — Future Items page */}
+        {page === "future" && (
+          <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 10 }}>
+            {["All", ...FUTURE_CATS].map(t => {
+              const th = THEMES[t] || { accent: "#b8860b" };
+              const isActive = futureTab === t;
+              return (
+                <button key={t} onClick={() => { setFutureTab(t); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  style={{ flexShrink: 0, fontSize: 11, padding: "5px 10px", borderRadius: 16, whiteSpace: "nowrap", cursor: "pointer", fontWeight: isActive ? 700 : 400, fontFamily: FONT, border: `1px solid ${isActive ? th.accent : "#ddd"}`, background: isActive ? th.accent : "transparent", color: isActive ? "#fff" : "#888" }}>{t}</button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Summary — tasks page only */}
+      {/* Summary — Tasks "All" view only */}
       {page === "tasks" && activeTab === "All" && (
         <div style={{ display: "flex", gap: 6, margin: "12px 12px 8px" }}>
-          {[{ n: openCount, l: "Open", c: "#b8860b" }, { n: highCount, l: "High", c: "#dc2626" }, { n: urgentCount, l: "Urgent", c: "#ef4444" }, { n: doneCount, l: "Done", c: "#22c55e" }].map(s => (
-            <div key={s.l} style={{ flex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 6px", textAlign: "center" }}>
+          {[{ n: openCount, l: "Open", c: "#b8860b", go: null }, { n: highCount, l: "High", c: "#dc2626", go: null }, { n: urgentCount, l: "Urgent", c: "#ef4444", go: null }, { n: doneCount, l: "Done", c: "#22c55e", go: "completed" as const }].map(s => (
+            <div key={s.l} onClick={() => s.go && setPage(s.go)} style={{ flex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 6px", textAlign: "center", cursor: s.go ? "pointer" : "default" }}>
               <div style={{ fontSize: 22, fontWeight: 900, color: s.c }}>{s.n}</div>
               <div style={{ fontSize: 9, color: "#999", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 1 }}>{s.l}</div>
             </div>
@@ -712,23 +914,30 @@ export default function App() {
       {/* Content */}
       {page === "tasks" ? (
         <div style={{ marginTop: 8 }}>
-          {activeTab === "All" ? CATS.map(c => c === "Bills" ? <BillBlock key={c} /> : <HeadingBlock key={c} cat={c} />) :
-           activeTab === "Bills" ? <BillBlock /> : <HeadingBlock cat={activeTab} />}
+          {activeTab === "All" ? CORE_CATS.map(c => <HeadingBlock key={c} cat={c} />) : <HeadingBlock cat={activeTab} />}
+        </div>
+      ) : page === "future" ? (
+        <div style={{ marginTop: 8 }}>
+          {futureTab === "All" ? FUTURE_CATS.map(c => <HeadingBlock key={c} cat={c} />) : <HeadingBlock cat={futureTab} />}
         </div>
       ) : page === "calendar" ? (
         <CalendarPage />
+      ) : page === "bills" ? (
+        <BillsPage />
+      ) : page === "completed" ? (
+        <CompletedPage />
       ) : (
         <InboxPage />
       )}
 
-      {/* Add bar — tasks page only */}
-      {page === "tasks" && (
+      {/* Add bar — Tasks & Future Items pages */}
+      {(page === "tasks" || page === "future") && (
         <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 520, padding: "8px 12px", background: "#f0f0f0", borderTop: "1px solid #ddd", zIndex: 50 }}>
           <div style={{ display: "flex", gap: 6 }}>
             <input value={addInput} onChange={e => setAddInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addTask()}
               placeholder="Add task..." style={{ flex: 1, background: "#fff", border: "1px solid #ddd", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#1a1a1a", outline: "none", fontFamily: FONT }} />
             <select value={addCat} onChange={e => setAddCat(e.target.value)} style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 10, padding: "8px 6px", fontSize: 11, color: "#666", maxWidth: 95, fontFamily: FONT }}>
-              {CATS.filter(c => c !== "Bills").map(c => <option key={c} value={c}>{c}</option>)}
+              {TASK_CATS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <button onClick={addTask} style={{ background: "#b8860b", border: "none", borderRadius: 10, padding: "10px 14px", fontSize: 18, fontWeight: 700, color: "#fff", cursor: "pointer" }}>+</button>
           </div>
@@ -754,7 +963,7 @@ export default function App() {
       {moveModal !== null && (
         <Overlay onClose={() => setMoveModal(null)}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Move: {tasks.find(t => t.id === moveModal)?.name}</h3>
-          {CATS.filter(c => c !== "Bills" && c !== tasks.find(t => t.id === moveModal)?.cat).map(c => (
+          {TASK_CATS.filter(c => c !== tasks.find(t => t.id === moveModal)?.cat).map(c => (
             <button key={c} onClick={() => { moveTask(moveModal, c); setMoveModal(null); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 4, borderRadius: 8, border: "1px solid #e5e7eb", borderLeft: `4px solid ${THEMES[c].accent}`, background: "transparent", fontSize: 14, cursor: "pointer", fontFamily: FONT }}>{c}</button>
           ))}
           <button onClick={() => setMoveModal(null)} style={{ display: "block", width: "100%", textAlign: "center", padding: 8, marginTop: 4, border: "none", background: "transparent", color: "#999", fontSize: 12, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
@@ -786,6 +995,47 @@ export default function App() {
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setAddBillModal(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ddd", background: "transparent", fontSize: 14, color: "#666", cursor: "pointer", fontFamily: FONT }}>Cancel</button>
             <button onClick={addBillFn} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: "#b8860b", fontSize: 14, color: "#fff", fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Add</button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* Task action sheet (kebab → Move / Delete) */}
+      {actionSheet !== null && (
+        <Overlay onClose={() => setActionSheet(null)}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{tasks.find(t => t.id === actionSheet)?.name}</h3>
+          <button onClick={() => { setMoveModal(actionSheet); setActionSheet(null); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "12px", marginBottom: 6, borderRadius: 10, border: "1px solid #e5e7eb", background: "transparent", fontSize: 14, cursor: "pointer", fontFamily: FONT }}><span style={{ fontSize: 16 }}>↗</span> Change category</button>
+          <button onClick={() => { setDeleteConfirm(actionSheet); setActionSheet(null); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "12px", marginBottom: 6, borderRadius: 10, border: "1px solid #fecaca", background: "transparent", fontSize: 14, color: "#dc2626", cursor: "pointer", fontFamily: FONT }}><span style={{ fontSize: 16 }}>✕</span> Delete task</button>
+          <button onClick={() => setActionSheet(null)} style={{ display: "block", width: "100%", textAlign: "center", padding: 8, border: "none", background: "transparent", color: "#999", fontSize: 12, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+        </Overlay>
+      )}
+
+      {/* Add event */}
+      {addEventModal && (
+        <Overlay onClose={() => setAddEventModal(false)}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Add event</h3>
+          <input value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder="Event title" style={{ width: "100%", background: "#f9f9f9", border: "1px solid #ddd", borderRadius: 8, padding: "10px 12px", fontSize: 14, marginBottom: 8, boxSizing: "border-box" as const, fontFamily: FONT }} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <input type="date" value={newEvent.date} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} style={{ flex: 1, background: "#f9f9f9", border: "1px solid #ddd", borderRadius: 8, padding: "10px 12px", fontSize: 13, boxSizing: "border-box" as const, fontFamily: FONT }} />
+            <input type="time" value={newEvent.time} onChange={e => setNewEvent({ ...newEvent, time: e.target.value })} style={{ width: 110, background: "#f9f9f9", border: "1px solid #ddd", borderRadius: 8, padding: "10px 12px", fontSize: 13, boxSizing: "border-box" as const, fontFamily: FONT }} />
+          </div>
+          <input value={newEvent.note} onChange={e => setNewEvent({ ...newEvent, note: e.target.value })} placeholder="Note (optional)" style={{ width: "100%", background: "#f9f9f9", border: "1px solid #ddd", borderRadius: 8, padding: "10px 12px", fontSize: 14, marginBottom: 12, boxSizing: "border-box" as const, fontFamily: FONT }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setAddEventModal(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ddd", background: "transparent", fontSize: 14, color: "#666", cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+            <button onClick={addEventFn} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: THEMES["Events"].accent, fontSize: 14, color: "#fff", fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Add</button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* Delete event confirm */}
+      {deleteEventConfirm !== null && (
+        <Overlay onClose={() => setDeleteEventConfirm(null)}>
+          <div style={{ textAlign: "center" }}>
+            <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Delete event?</p>
+            <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>{events.find(e => e.id === deleteEventConfirm)?.title}</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setDeleteEventConfirm(null)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ddd", background: "transparent", fontSize: 14, color: "#666", cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+              <button onClick={() => { deleteEvent(deleteEventConfirm); setDeleteEventConfirm(null); }} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", background: "#ef4444", fontSize: 14, color: "#fff", fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Delete</button>
+            </div>
           </div>
         </Overlay>
       )}
