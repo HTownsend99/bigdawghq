@@ -279,7 +279,7 @@ export default function App() {
   if (!session) return (
     <div style={{ maxWidth: 360, margin: "80px auto", padding: "0 20px", fontFamily: FONT }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 32, fontWeight: 800, color: "#b8860b", letterSpacing: -1 }}>Big Dawg HQ</div>
+        <div style={{ fontSize: 32, fontWeight: 800, color: "#b8860b", letterSpacing: -1 }}>Townsend OS</div>
         <div style={{ fontSize: 14, color: "#888", marginTop: 4 }}>{authMode === "signin" ? "Sign in to your account" : "Create your account"}</div>
       </div>
       <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="Email" type="email"
@@ -540,7 +540,7 @@ export default function App() {
       {/* Header */}
       <div style={{ position: "sticky", top: 0, zIndex: 50, background: "#f0f0f0", borderBottom: "1px solid #ddd", padding: "14px 12px 0" }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.5, color: "#b8860b" }}>Big Dawg HQ</span>
+          <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.5, color: "#b8860b" }}>Townsend OS</span>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "#999" }}>{dateStr}</span>
             <button onClick={() => supabase.auth.signOut()} style={{ fontSize: 10, color: "#999", background: "none", border: "1px solid #ddd", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Logout</button>
