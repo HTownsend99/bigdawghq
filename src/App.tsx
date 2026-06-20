@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import type { Session } from "@supabase/supabase-js";
+import { Analytics } from "@vercel/analytics/next";
 
 /* ══════════════════════════════════════════════
    THEME CONFIG
@@ -141,6 +142,41 @@ const dueStyle = (dl: any) => {
 const smallBtn: any = { fontSize: 11, padding: "2px 6px", borderRadius: 6, border: "1px solid #e5e7eb", color: "#9ca3af", cursor: "pointer", background: "transparent", lineHeight: "18px" };
 
 /* ══════════════════════════════════════════════
+   INBOX DATA
+   ══════════════════════════════════════════════ */
+const INBOX_MESSAGES = [
+  { id: 1, sender: "Brad Hunter", platform: "LinkedIn", platformColor: "#0a66c2", platformBg: "#e8f4fd", content: "Fortune 500 in-house Property Counsel role, Sydney, WFH flex. Call arranged — you sent your number, he replied \"Looking forward to it 👌\"", age: "3 days ago", flag: "Call pending", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 2, sender: "Lyndsey Warren", platform: "LinkedIn", platformColor: "#0a66c2", platformBg: "#e8f4fd", content: "Engage Personnel. Asked what type of firm and role you're after so she can match you. Awaiting your brief.", age: "12 days ago", flag: "Reply owed", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 3, sender: "Peter Dallimer", platform: "LinkedIn", platformColor: "#0a66c2", platformBg: "#e8f4fd", content: "TAP — runs the Sydney private-practice legal desk. Wants a call to understand your motivators; flexible on timing.", age: "13 days ago", flag: "Reply owed", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 4, sender: "Marianna Tuccia", platform: "LinkedIn", platformColor: "#0a66c2", platformBg: "#e8f4fd", content: "Empire Group, 18 yrs placing Sydney lawyers. Wants a chat; offered to send their updated salary guide.", age: "14 days ago", flag: "Reply owed", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 5, sender: "+61 448 740 112", platform: "iMessage", platformColor: "#1e8449", platformBg: "#e8f8ef", content: "Supportive conversation about your career change — MD plan, cafe job, chill law role. Last message: \"I'm glad you've found something to look forward to.\"", age: "3 days ago", flag: "Worth a reply", flagColor: "#1a7a40", flagBg: "#e8f8ef", priority: 2 },
+  { id: 6, sender: "Aunty Kirsten (+61 428 381 060)", platform: "iMessage", platformColor: "#1e8449", platformBg: "#e8f8ef", content: "Replied \"Thanks Hamish xx\" to your condolence message about Isaac. Closed naturally.", age: "3 days ago", flag: "No action", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 7, sender: "ANDY 🦈", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Gym banter. Last message: \"250mg creatine\" + laugh emoji.", age: "3 days ago", flag: "Optional", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 8, sender: "Fernanda Colares", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Ongoing personal conversation. No action item.", age: "2 days ago", flag: "Optional", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 9, sender: "Kai Heath", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Shared hairdresser profile @matteobarbari.hair — looks like a recommendation.", age: "5 days ago", flag: "Optional", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 10, sender: "Maximillian", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Story reaction — \"Vibes\". Not a real thread.", age: "9 days ago", flag: "No action", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 11, sender: "liam.mls", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Story reaction — \"Win big baby\". Not a real thread.", age: "15 days ago", flag: "No action", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 12, sender: "48 Laws of Power (group)", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Jack Milner, liam.mls. Group banter, nothing directed at you.", age: "3 days ago", flag: "No action", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 13, sender: "NBA Chad Lads (muted)", platform: "Instagram", platformColor: "#b8338c", platformBg: "#fce8f4", content: "Muted group. Banter only.", age: "9 days ago", flag: "No action", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+];
+
+const INBOX_EMAILS = [
+  { id: 1, sender: "Strata Manager", subject: "AGM Date — Thursday 10 September 2026", content: "Manager proposing the Annual General Meeting be held Thu 10 Sep 2026. Needs a committee response to lock the date.", age: "Recent", flag: "Respond", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 2, sender: "Sonder Consultants", subject: "Real Estate Lawyer opportunity", content: "Leading real estate practice looking to add a solicitor. Relevant to your search — skim and decide if worth replying.", age: "~2 days", flag: "Review", flagColor: "#d97706", flagBg: "#fffbeb", priority: 1 },
+  { id: 3, sender: "Alex Correa", subject: "Executive Real Estate Lawyer role", content: "Significant real estate work, industry-leading firm. Same bucket as Sonder — review and decide.", age: "~3 days", flag: "Review", flagColor: "#d97706", flagBg: "#fffbeb", priority: 1 },
+  { id: 4, sender: "Seek", subject: "New job recommendations for you (x2)", content: "Two automated job recommendation emails. Low signal but worth a 30-second scan given your active search.", age: "1-4 days", flag: "Skim", flagColor: "#2563eb", flagBg: "#eff6ff", priority: 2 },
+  { id: 5, sender: "Apple / ChatGPT", subject: "ChatGPT Plus expires 28 Jun — $29.99/mo", content: "Subscription expiring in 7 days. Decide whether to renew or cancel (you're transitioning to Claude).", age: "Recent", flag: "Decide by 28 Jun", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 6, sender: "Apple / Tinder", subject: "Tinder Plus renews 27 Jun", content: "Auto-renews in days. Decide keep or cancel.", age: "Recent", flag: "Decide by 27 Jun", flagColor: "#dc2626", flagBg: "#fef2f2", priority: 1 },
+  { id: 7, sender: "Apple / NordVPN", subject: "NordVPN — $20.99/mo, renews 20 Jul", content: "Subscription confirmed and active. No action required yet.", age: "Recent", flag: "Note", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 8, sender: "Instagram", subject: "Security cluster — password changed, account public, new logins", content: "Password changed + account switched to public + 2 new logins (Linux/Chrome + Mac/Chrome, Sydney). Likely Beeper setup — verify it was you.", age: "Recent", flag: "Verify", flagColor: "#d97706", flagBg: "#fffbeb", priority: 2 },
+  { id: 9, sender: "Google / Composio", subject: "Composio granted access to Google account", content: "Access granted via OAuth. Likely your integration setup. Verify if intentional.", age: "Recent", flag: "Verify", flagColor: "#d97706", flagBg: "#fffbeb", priority: 2 },
+  { id: 10, sender: "Steam", subject: "New device logins + Guard codes", content: "Two new-device logins with Guard codes sent. Likely you — verify if not.", age: "Recent", flag: "Likely you", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 11, sender: "Beeper", subject: "Welcome + login code", content: "Onboarding emails from your Beeper signup. No action.", age: "Recent", flag: "Onboarding", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 12, sender: "Apple / Telstra", subject: "Receipts — payments, refunds, data alerts", content: "Apple refund $19.99 (Tinder), payments $49.98 & $20.99. Telstra data reset 22 Jun. me&u / Assembly / Steam receipts. No action.", age: "Recent", flag: "Receipts", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+  { id: 13, sender: "ACE Newsletter / NordVPN promos", subject: "Marketing & setup emails (x5)", content: "ACE newsletter x2, NordVPN setup/connect prompts x2, Nord-Google linked. Safe to archive.", age: "Recent", flag: "Archive", flagColor: "#9ca3af", flagBg: "#f3f4f6", priority: 3 },
+];
+
+/* ══════════════════════════════════════════════
    MAIN APP
    ══════════════════════════════════════════════ */
 export default function App() {
@@ -155,7 +191,7 @@ export default function App() {
   const [bills, setBills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [page, setPage] = useState<"tasks" | "calendar">("tasks");
+  const [page, setPage] = useState<"tasks" | "calendar" | "inbox">("tasks");
   const [activeTab, setActiveTab] = useState("All");
   const [dueModal, setDueModal] = useState<number | null>(null);
   const [moveModal, setMoveModal] = useState<number | null>(null);
@@ -166,10 +202,11 @@ export default function App() {
   const [customDate, setCustomDate] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
-  // Calendar state
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const [inboxTab, setInboxTab] = useState<"messages" | "email">("messages");
 
   /* ── Auth ── */
   useEffect(() => {
@@ -187,7 +224,6 @@ export default function App() {
     ]);
     if (t && t.length > 0) setTasks(t);
     else {
-      // Seed defaults on first login
       const userId = session.user.id;
       const rows = DEFAULT_TASKS.map(d => ({ ...d, user_id: userId }));
       const { data: inserted } = await supabase.from("tasks").insert(rows).select();
@@ -272,10 +308,8 @@ export default function App() {
     await supabase.from("bills").delete().eq("id", id);
   };
 
-  /* ── Auth loading ── */
   if (authLoading) return <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: FONT }}>Loading...</div>;
 
-  /* ── Auth screen ── */
   if (!session) return (
     <div style={{ maxWidth: 360, margin: "80px auto", padding: "0 20px", fontFamily: FONT }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
@@ -317,7 +351,6 @@ export default function App() {
     const isOverdue = dl && dl.cls === "overdue";
     const isBold = t.priority === "high" || t.urgent || isOverdue;
     const isItalic = t.priority === "low" && !t.urgent && !isOverdue;
-
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 4, borderRadius: 10, border: `1px solid ${theme.border}40`, background: theme.card, opacity: t.done ? 0.35 : 1, borderLeft: `4px solid ${theme.accent}`, transition: "opacity 0.2s" }}>
         <button onClick={() => toggleDone(t.id)} style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, cursor: "pointer", border: t.done ? "none" : `2.5px solid ${theme.accent}60`, display: "flex", alignItems: "center", justifyContent: "center", background: t.done ? "#22c55e" : "transparent" }}>
@@ -411,70 +444,170 @@ export default function App() {
   );
 
   /* ══════════════════════════════════════════════
+     INBOX PAGE
+     ══════════════════════════════════════════════ */
+  const InboxPage = () => {
+    const urgentMessages = INBOX_MESSAGES.filter(m => m.priority === 1);
+    const personalMessages = INBOX_MESSAGES.filter(m => m.priority === 2);
+    const noActionMessages = INBOX_MESSAGES.filter(m => m.priority === 3);
+    const urgentEmails = INBOX_EMAILS.filter(e => e.priority === 1);
+    const reviewEmails = INBOX_EMAILS.filter(e => e.priority === 2);
+    const noActionEmails = INBOX_EMAILS.filter(e => e.priority === 3);
+
+    const InboxCard = ({ item, showSubject }: { item: any; showSubject?: boolean }) => (
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: `4px solid ${item.platformColor || "#b8860b"}`, borderRadius: 10, padding: "12px 14px", marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const, marginBottom: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>{item.sender}</span>
+              {item.platform && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: item.platformBg, color: item.platformColor }}>
+                  {item.platform}
+                </span>
+              )}
+            </div>
+            {showSubject && item.subject && (
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 4 }}>{item.subject}</div>
+            )}
+            <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>{item.content}</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: "monospace", whiteSpace: "nowrap" as const }}>{item.age}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: item.flagBg, color: item.flagColor, whiteSpace: "nowrap" as const }}>{item.flag}</span>
+          </div>
+        </div>
+      </div>
+    );
+
+    const SectionLabel = ({ text, urgent }: { text: string; urgent?: boolean }) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 10px" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, color: urgent ? "#dc2626" : "#9ca3af", whiteSpace: "nowrap" as const }}>{text}</span>
+        <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
+      </div>
+    );
+
+    return (
+      <div style={{ padding: "12px 12px 80px" }}>
+        {/* Stats */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+          {[
+            { n: INBOX_MESSAGES.filter(m => m.priority === 1).length, l: "Reply owed", c: "#dc2626" },
+            { n: INBOX_MESSAGES.length, l: "Messages", c: "#b8860b" },
+            { n: INBOX_EMAILS.filter(e => e.priority === 1).length, l: "Urgent email", c: "#dc2626" },
+            { n: INBOX_EMAILS.length, l: "Emails", c: "#6b7280" },
+          ].map(s => (
+            <div key={s.l} style={{ flex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 6px", textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: s.c }}>{s.n}</div>
+              <div style={{ fontSize: 9, color: "#999", textTransform: "uppercase" as const, letterSpacing: 0.5, marginTop: 1 }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Do first strip */}
+        <div style={{ background: "#1c1a16", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" as const, color: "#e8c14a", marginBottom: 10 }}>Do these first</div>
+          {[
+            "Brad Hunter (LinkedIn) — live Property Counsel role, call pending",
+            "Lyndsey Warren, Peter Dallimer, Marianna Tuccia — 3 recruiters, one template reply clears all",
+            "Strata AGM email — committee response needed for 10 Sep date",
+            "ChatGPT (28 Jun) & Tinder (27 Jun) — decide keep or cancel this week",
+            "Instagram security cluster — verify it was all you setting up Beeper",
+          ].map((item, i) => (
+            <div key={i} style={{ display: "flex", gap: 12, padding: "8px 0", borderTop: i > 0 ? "1px solid #34302a" : "none", fontSize: 13, color: "#c9c0af", lineHeight: 1.4 }}>
+              <span style={{ fontFamily: "monospace", fontSize: 11, color: "#6b6457", fontWeight: 700, flexShrink: 0, paddingTop: 1 }}>0{i + 1}</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Sub-tabs */}
+        <div style={{ display: "flex", gap: 0, marginBottom: 4, borderBottom: "1px solid #e5e7eb" }}>
+          {(["messages", "email"] as const).map(t => (
+            <button key={t} onClick={() => setInboxTab(t)} style={{
+              flex: 1, padding: "8px 0", fontSize: 13, fontWeight: inboxTab === t ? 700 : 500, cursor: "pointer", fontFamily: FONT,
+              border: "none", borderBottom: inboxTab === t ? "3px solid #b8860b" : "3px solid transparent",
+              background: "transparent", color: inboxTab === t ? "#b8860b" : "#999",
+            }}>
+              {t === "messages" ? `Messages (${INBOX_MESSAGES.length})` : `Email (${INBOX_EMAILS.length})`}
+            </button>
+          ))}
+        </div>
+
+        {inboxTab === "messages" && (
+          <div>
+            <SectionLabel text="Reply owed · Job hunt" urgent />
+            {urgentMessages.map(m => <InboxCard key={m.id} item={m} />)}
+            <SectionLabel text="Reply owed · Personal" />
+            {personalMessages.map(m => <InboxCard key={m.id} item={m} />)}
+            <SectionLabel text="No action needed" />
+            {noActionMessages.map(m => <InboxCard key={m.id} item={m} />)}
+          </div>
+        )}
+
+        {inboxTab === "email" && (
+          <div>
+            <SectionLabel text="Needs attention" urgent />
+            {urgentEmails.map(e => <InboxCard key={e.id} item={e} showSubject />)}
+            <SectionLabel text="Worth a look" />
+            {reviewEmails.map(e => <InboxCard key={e.id} item={e} showSubject />)}
+            <SectionLabel text="No action · receipts & noise" />
+            {noActionEmails.map(e => <InboxCard key={e.id} item={e} showSubject />)}
+          </div>
+        )}
+
+        <div style={{ marginTop: 24, fontSize: 11, color: "#c4b89a", fontFamily: "monospace", textAlign: "center" as const, lineHeight: 1.6 }}>
+          Snapshot · {dateStr}<br />
+          Say "triage my inbox" in Claude to refresh
+        </div>
+      </div>
+    );
+  };
+
+  /* ══════════════════════════════════════════════
      CALENDAR PAGE
      ══════════════════════════════════════════════ */
   const CalendarPage = () => {
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-    const firstDay = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+    const firstDay = new Date(calYear, calMonth, 1).getDay();
     const monthName = new Date(calYear, calMonth).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
-
-    // Map dates to tasks
     const dateMap: Record<string, any[]> = {};
     tasks.filter(t => !t.done).forEach(t => {
       const d = getTaskDate(t.due);
-      if (d) {
-        if (!dateMap[d]) dateMap[d] = [];
-        dateMap[d].push(t);
-      }
+      if (d) { if (!dateMap[d]) dateMap[d] = []; dateMap[d].push(t); }
     });
-
     const todayStr = new Date().toISOString().slice(0, 10);
     const cells: any[] = [];
-    // Pad start
     for (let i = 0; i < firstDay; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       cells.push({ day: d, date: ds, tasks: dateMap[ds] || [] });
     }
-
     const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else setCalMonth(calMonth - 1); };
     const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); };
-
     const selTasks = selectedDate ? (dateMap[selectedDate] || []) : [];
-
     return (
       <div style={{ padding: "12px 12px 0" }}>
-        {/* Month nav */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <button onClick={prevMonth} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer", color: "#666", padding: "4px 10px" }}>‹</button>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>{monthName}</span>
           <button onClick={nextMonth} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer", color: "#666", padding: "4px 10px" }}>›</button>
         </div>
-
-        {/* Day headers */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
             <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: "#999", padding: 4 }}>{d}</div>
           ))}
         </div>
-
-        {/* Calendar grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
           {cells.map((cell, i) => {
             if (!cell) return <div key={`empty-${i}`} />;
             const isToday = cell.date === todayStr;
             const isSelected = cell.date === selectedDate;
-            const hasItems = cell.tasks.length > 0;
             const cats = [...new Set(cell.tasks.map((t: any) => t.cat))];
-
             return (
               <button key={cell.date} onClick={() => setSelectedDate(isSelected ? null : cell.date)}
-                style={{
-                  padding: "6px 2px 8px", borderRadius: 10, border: isSelected ? "2px solid #b8860b" : isToday ? "2px solid #2563eb" : "1px solid #eee",
-                  background: isSelected ? "#fff9e6" : isToday ? "#eff6ff" : "#fff", cursor: "pointer", textAlign: "center", position: "relative", minHeight: 48,
-                }}>
+                style={{ padding: "6px 2px 8px", borderRadius: 10, border: isSelected ? "2px solid #b8860b" : isToday ? "2px solid #2563eb" : "1px solid #eee", background: isSelected ? "#fff9e6" : isToday ? "#eff6ff" : "#fff", cursor: "pointer", textAlign: "center", minHeight: 48 }}>
                 <div style={{ fontSize: 14, fontWeight: isToday ? 800 : 500, color: isToday ? "#2563eb" : "#1a1a1a" }}>{cell.day}</div>
-                {hasItems && (
+                {cell.tasks.length > 0 && (
                   <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 3, flexWrap: "wrap" }}>
                     {cats.slice(0, 3).map((c: string) => (
                       <div key={c} style={{ width: 6, height: 6, borderRadius: "50%", background: THEMES[c]?.accent || "#888" }} />
@@ -485,8 +618,6 @@ export default function App() {
             );
           })}
         </div>
-
-        {/* Selected date tasks */}
         {selectedDate && (
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
@@ -494,23 +625,14 @@ export default function App() {
               <span style={{ fontSize: 13, fontWeight: 500, color: "#888", marginLeft: 8 }}>{selTasks.length} task{selTasks.length !== 1 ? "s" : ""}</span>
             </div>
             {selTasks.length === 0 && <div style={{ color: "#aaa", fontSize: 14, padding: "12px 0" }}>Nothing scheduled for this date</div>}
-            {selTasks.map(t => {
-              const th = THEMES[t.cat] || THEMES["Today"];
-              return <TaskCard key={t.id} t={t} theme={th} />;
-            })}
+            {selTasks.map(t => { const th = THEMES[t.cat] || THEMES["Today"]; return <TaskCard key={t.id} t={t} theme={th} />; })}
           </div>
         )}
-
-        {/* Upcoming items list */}
         <div style={{ marginTop: 24, paddingBottom: 80 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>Upcoming</div>
           {(() => {
-            const upcoming = tasks
-              .filter(t => !t.done && getTaskDate(t.due))
-              .map(t => ({ ...t, _date: getTaskDate(t.due)! }))
-              .filter(t => t._date >= todayStr)
-              .sort((a, b) => a._date.localeCompare(b._date))
-              .slice(0, 15);
+            const todayStr2 = new Date().toISOString().slice(0, 10);
+            const upcoming = tasks.filter(t => !t.done && getTaskDate(t.due)).map(t => ({ ...t, _date: getTaskDate(t.due)! })).filter(t => t._date >= todayStr2).sort((a, b) => a._date.localeCompare(b._date)).slice(0, 15);
             if (!upcoming.length) return <div style={{ color: "#aaa", fontSize: 14 }}>No upcoming dated tasks</div>;
             let lastDate = "";
             return upcoming.map(t => {
@@ -547,20 +669,20 @@ export default function App() {
           </div>
         </div>
 
-        {/* Page nav */}
+        {/* Page nav — Tasks / Calendar / Inbox */}
         <div style={{ display: "flex", gap: 0, marginBottom: 8 }}>
-          {(["tasks", "calendar"] as const).map(p => (
+          {(["tasks", "calendar", "inbox"] as const).map(p => (
             <button key={p} onClick={() => setPage(p)} style={{
               flex: 1, padding: "8px 0", fontSize: 13, fontWeight: page === p ? 700 : 500, cursor: "pointer", fontFamily: FONT,
               border: "none", borderBottom: page === p ? "3px solid #b8860b" : "3px solid transparent",
               background: "transparent", color: page === p ? "#b8860b" : "#999",
             }}>
-              {p === "tasks" ? "Tasks" : "Calendar"}
+              {p === "tasks" ? "Tasks" : p === "calendar" ? "Calendar" : "Inbox"}
             </button>
           ))}
         </div>
 
-        {/* Category tabs (tasks page only) */}
+        {/* Category tabs — tasks page only */}
         {page === "tasks" && (
           <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 10 }}>
             {["All", ...CATS].map(t => {
@@ -568,17 +690,14 @@ export default function App() {
               const isActive = activeTab === t;
               return (
                 <button key={t} onClick={() => { setActiveTab(t); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                  style={{
-                    flexShrink: 0, fontSize: 11, padding: "5px 10px", borderRadius: 16, whiteSpace: "nowrap", cursor: "pointer", fontWeight: isActive ? 700 : 400, fontFamily: FONT,
-                    border: `1px solid ${isActive ? th.accent : "#ddd"}`, background: isActive ? th.accent : "transparent", color: isActive ? "#fff" : "#888",
-                  }}>{t}</button>
+                  style={{ flexShrink: 0, fontSize: 11, padding: "5px 10px", borderRadius: 16, whiteSpace: "nowrap", cursor: "pointer", fontWeight: isActive ? 700 : 400, fontFamily: FONT, border: `1px solid ${isActive ? th.accent : "#ddd"}`, background: isActive ? th.accent : "transparent", color: isActive ? "#fff" : "#888" }}>{t}</button>
               );
             })}
           </div>
         )}
       </div>
 
-      {/* Summary (tasks page) */}
+      {/* Summary — tasks page only */}
       {page === "tasks" && activeTab === "All" && (
         <div style={{ display: "flex", gap: 6, margin: "12px 12px 8px" }}>
           {[{ n: openCount, l: "Open", c: "#b8860b" }, { n: highCount, l: "High", c: "#dc2626" }, { n: urgentCount, l: "Urgent", c: "#ef4444" }, { n: doneCount, l: "Done", c: "#22c55e" }].map(s => (
@@ -596,11 +715,13 @@ export default function App() {
           {activeTab === "All" ? CATS.map(c => c === "Bills" ? <BillBlock key={c} /> : <HeadingBlock key={c} cat={c} />) :
            activeTab === "Bills" ? <BillBlock /> : <HeadingBlock cat={activeTab} />}
         </div>
-      ) : (
+      ) : page === "calendar" ? (
         <CalendarPage />
+      ) : (
+        <InboxPage />
       )}
 
-      {/* Add bar */}
+      {/* Add bar — tasks page only */}
       {page === "tasks" && (
         <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 520, padding: "8px 12px", background: "#f0f0f0", borderTop: "1px solid #ddd", zIndex: 50 }}>
           <div style={{ display: "flex", gap: 6 }}>
